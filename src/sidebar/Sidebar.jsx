@@ -1,7 +1,9 @@
 import React, { Component } from "react";
 import "./Sidebar.css";
 import * as helpers from "../helpers/helpers";
+
 import TOC from "./components/toc/TOC";
+
 //import TOCv1 from './components/toc/TOCV1.jsx'
 //import TOCv2 from './components/toc/TOCv2.jsx'
 import SidebarItemList from "./SidebarItemList";
@@ -10,11 +12,9 @@ import MyMaps from "./components/mymaps/MyMaps";
 import { Tab, Tabs, TabList, TabPanel } from "react-tabs";
 import "react-tabs/style/react-tabs.css";
 import SidebarComponent from "react-sidebar";
-//import MenuButton from './MenuButton.jsx';
 import ComponentsConfig from "../config.json";
 import SidebarSlim from "./SidebarSlim.jsx";
 
-// TEST COMMENT
 class Sidebar extends Component {
   constructor(props) {
     super(props);
@@ -32,7 +32,7 @@ class Sidebar extends Component {
       // CLASSES
       tabClassName: "sidebar-advanced-tab",
       sidebarOpen: false,
-
+      defaultSidebarOpen: false,
       // SELECTED TAB
       tabIndex: 0,
 
@@ -62,11 +62,18 @@ class Sidebar extends Component {
   onMyMapsEditing = isMyMapsEditing => {
     // DISABLE PARCEL CLICK
     window.disableParcelClick = isMyMapsEditing;
-
+    // DISABLE IDENTIFY CLICK
+    window.disableIdentifyClick = isMyMapsEditing;
     // DISABLE POPUPS
     window.isDrawingOrEditing = isMyMapsEditing;
-
-    this.setState({ isMyMapsEditing });
+    if(ComponentsConfig.leftClickIdentify){
+      if (isMyMapsEditing){
+        window.emitter.emit("changeCursor","standard");
+      }else{
+        window.emitter.emit("changeCursor","identify");
+      }
+    }
+    this.setState({ isMyMapsEditing:isMyMapsEditing });
   };
 
   onSetSidebarOpen(open) {
@@ -106,7 +113,6 @@ class Sidebar extends Component {
   async componentDidMount() {
     // IMPORT TOOLS FROM CONFIG
     const tools = ComponentsConfig.sidebarToolComponents;
-    let index = 0;
     tools.map(async component => await this.addComponent(component, "tools"));
 
     // IMPORT THEMES FROM CONFIG
@@ -119,7 +125,7 @@ class Sidebar extends Component {
     const url = new URL(window.location.href.toUpperCase());
     const viewerMode = url.searchParams.get("MODE");
     window.sidebarOpen = false;
-    if (viewerMode !== null && viewerMode === "ADVANCED") {
+    if ((viewerMode !== null && viewerMode === "ADVANCED") || this.state.defaultSidebarOpen) {
       this.togglePanelVisibility();
       window.sidebarOpen = true;
       this.setState({ sidebarOpen: true });
@@ -152,7 +158,7 @@ class Sidebar extends Component {
   initToolAndThemeUrlParameter = () => {
     var i = 0;
     var isLoading = false;
-    for (var i = 1; i <= 100; i++) {
+    for (i = 1; i <= 100; i++) {
       if (isLoading) return;
       // eslint-disable-next-line
       (index => {
@@ -245,11 +251,26 @@ class Sidebar extends Component {
 
   activateTab(tabName) {
     // SET SELECTED TAB
-    if (tabName === "layers") this.setState({ tabIndex: 0 });
-    else if (tabName === "tools") this.setState({ tabIndex: 1 });
-    else if (tabName === "mymaps") this.setState({ tabIndex: 2 });
-    else if (tabName === "themes") this.setState({ tabIndex: 3 });
-    else if (tabName === "reports") this.setState({ tabIndex: 4 });
+    if (tabName === "layers") {
+      this.onMyMapsEditing(false);
+      this.setState({ tabIndex: 0 });
+    }
+    else if (tabName === "tools"){
+      this.onMyMapsEditing(true);
+      this.setState({ tabIndex: 1 });
+    }
+    else if (tabName === "mymaps") {
+      this.onMyMapsEditing(true);
+      this.setState({ tabIndex: 2 });
+    }
+    else if (tabName === "themes") {
+      this.onMyMapsEditing(true);
+      this.setState({ tabIndex: 3 });
+    }
+    else if (tabName === "reports"){ 
+      this.onMyMapsEditing(false);
+      this.setState({ tabIndex: 4 });
+    }
     else console.log("NO VALID TAB FOUND");
   }
 
@@ -298,7 +319,7 @@ class Sidebar extends Component {
       }
 
       helpers.addAppStat("Tool", name);
-    } else {
+    }  else {
       var loadedTheme = this.state.activeTabComponents.themes.loadedComponent;
       if (loadedTheme != null) this.setState({ activeComponent: loadedTheme });
       else {
@@ -345,11 +366,25 @@ class Sidebar extends Component {
 
   onTabSelect = tabIndex => {
     this.setState({ tabIndex });
-    if (tabIndex === 0) helpers.addAppStat("Tab", "Layers");
-    else if (tabIndex === 1) helpers.addAppStat("Tab", "Tools");
-    else if (tabIndex === 2) helpers.addAppStat("Tab", "MyMaps");
-    else if (tabIndex === 3) helpers.addAppStat("Tab", "Themes");
-    else if (tabIndex === 4) helpers.addAppStat("Tab", "Reports");
+    if (tabIndex === 0) {
+      this.onMyMapsEditing(false);
+      helpers.addAppStat("Tab", "Layers");
+    }
+    else if (tabIndex === 1) {
+      this.onMyMapsEditing(true);
+      helpers.addAppStat("Tab", "Tools");
+    }
+    else if (tabIndex === 2) { 
+      this.onMyMapsEditing(true);
+      helpers.addAppStat("Tab", "MyMaps");
+    }else if (tabIndex === 3) {
+      this.onMyMapsEditing(false);
+      helpers.addAppStat("Tab", "Themes");
+    }
+    else if (tabIndex === 4) {
+      this.onMyMapsEditing(false);
+      helpers.addAppStat("Tab", "Reports");
+    }
   };
 
   //<Tabs forceRenderTabPanel={true} onSelect={tabIndex => this.setState({ tabIndex })} selectedIndex={this.state.tabIndex}>
@@ -373,7 +408,7 @@ class Sidebar extends Component {
                 <Tab id="tab-tools">
                   <TabButton imageURL={images["tools-32x32.png"]} name="Tools" active={this.state.activeTabComponents.tools.loadedComponent} />
                 </Tab>
-                <Tab id="tab-mymaps">
+				<Tab id="tab-mymaps">
                   <TabButton imageURL={images["map-32x32.png"]} name="My Maps" active={this.state.isMyMapsEditing} />
                 </Tab>
                 <Tab id="tab-themes">

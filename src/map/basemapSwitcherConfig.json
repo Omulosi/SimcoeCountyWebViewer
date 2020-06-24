@@ -6,14 +6,14 @@
     {
       "name": "Topographic",
       "image": "esri-topo.png",
-      "index": 0,
+      "index":0,
       "layers": [
         {
           "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer",
           "type": "SIMCOE_TILED"
         },
         {
-          "url": "http://it-adm-8h701sd2:6080/arcgis/rest/services/Public/OpenGISTopoCacheTen6Oct8/MapServer",
+          "url": "https://maps.simcoe.ca/arcgis/rest/services/Public/OpenGIS_Topo/MapServer",
           "type": "SIMCOE_TILED"
         }
       ],
@@ -62,7 +62,7 @@
       "url": "https://maps.simcoe.ca/arcgis/rest/services/Public/Ortho_1989_Cache/MapServer",
       "name": "1989"
     },
-    {
+        {
       "url": "https://maps.simcoe.ca/arcgis/rest/services/Public/Ortho_1997_Cache/MapServer",
       "name": "1997"
     },
@@ -89,6 +89,7 @@
     {
       "url": "https://maps.simcoe.ca/arcgis/rest/services/Public/Ortho_2018_Cache/MapServer",
       "name": "2018"
+        }
+      ]
     }
-  ]
-}
+    

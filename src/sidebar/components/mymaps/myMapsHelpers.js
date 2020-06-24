@@ -1,21 +1,7 @@
-import React, { Component } from "react";
-import ReactDOM from "react-dom";
-import FloatingMenu, { FloatingMenuItem } from "../../../helpers/FloatingMenu.jsx";
-import { SubMenu, Item as MenuItem } from "rc-menu";
-import Portal from "../../../helpers/Portal.jsx";
-import Draw, { createBox } from "ol/interaction/Draw.js";
-import { Vector as VectorSource } from "ol/source.js";
-import { Circle as CircleStyle, Fill, Stroke, Style, Icon, RegularShape } from "ol/style.js";
-import { Vector as VectorLayer } from "ol/layer.js";
-import Collection from "ol/Collection";
+import { Circle as CircleStyle, Fill, Stroke, Style, RegularShape } from "ol/style.js";
 import { asArray } from "ol/color";
-import GeoJSON from "ol/format/GeoJSON.js";
 import DoubleClickZoom from "ol/interaction/DoubleClickZoom";
-import Point from "ol/geom/Point.js";
 import LineString from "ol/geom/LineString.js";
-import Feature from "ol/Feature";
-import { transform } from "ol/proj.js";
-
 import * as helpers from "../../../helpers/helpers";
 import mainConfig from "../../../config.json";
 
@@ -216,13 +202,18 @@ export function getPointStyle(pointType = "circle", radius = 5, strokeColor = "b
       })
     });
   } else if (pointType === "star") {
+    let radius2 = 0;
+    if (radius < 15) radius2 = 4;
+    else if (radius > 15 && radius < 40) radius2 = 8;
+    else if (radius > 40 && radius < 70) radius2 = 16;
+    else radius2 = 22;
     style = new Style({
       image: new RegularShape({
         fill: fill,
         stroke: stroke,
         points: 5,
         radius: radius,
-        radius2: 4,
+        radius2: radius2,
         angle: 0,
         rotation: rotation
       })
@@ -320,6 +311,7 @@ export function controlDoubleClickZoom(active) {
 export function setFeatureLabel(itemInfo) {
   let feature = getFeatureById(itemInfo.id);
   let style = feature.getStyle();
+
   if (itemInfo.labelVisible) {
     const textStyle = helpers.createTextStyle(
       feature,

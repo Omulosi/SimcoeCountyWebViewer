@@ -55,7 +55,7 @@ class BasemapSwitcher extends Component {
 
       // LAYER PROPS
       layer.setProperties({ index: index, name: service.name });
-      layer.setZIndex(index);
+      layer.setZIndex(index + 1);
       layer.setVisible(false);
 
       // SET MAIN LAYER VISIBLE
@@ -129,18 +129,26 @@ class BasemapSwitcher extends Component {
           var parser = new xml2js.Parser();
 
           // PARSE TO JSON
-          parser.parseString(result, function(err, result) {
+          parser.parseString(result, (err, result) => {
             const groupLayerList = result.WMS_Capabilities.Capability[0].Layer[0].Layer[0].Layer;
-            index++;
+
+            index = groupLayerList.length + index;
+            let overlayIndex = index;
+            //index++;
+
             groupLayerList.forEach(layerInfo => {
+              const keywords = layerInfo.KeywordList[0].Keyword;
+              const opacity = this.getOpacity(keywords);
               const layerNameOnly = layerInfo.Name[0].split(":")[1];
               const serverUrl = groupUrl.split("/geoserver/")[0] + "/geoserver";
 
               let groupLayer = helpers.getImageWMSLayer(serverUrl + "/wms", layerInfo.Name[0]);
               groupLayer.setVisible(true);
-              groupLayer.setProperties({ index: index, name: layerNameOnly, isOverlay: true });
+              groupLayer.setOpacity(opacity);
+              groupLayer.setZIndex(overlayIndex);
+              groupLayer.setProperties({ index: overlayIndex, name: layerNameOnly, isOverlay: true });
               serviceLayers.push(groupLayer);
-              index++;
+              overlayIndex--;
             });
 
             // USING LAYER GROUPS FOR TOPO
@@ -167,6 +175,17 @@ class BasemapSwitcher extends Component {
     setTimeout(() => {
       this.handleURLParameters();
     }, 100);
+  }
+
+  getOpacity(keywords) {
+    if (keywords === undefined) return 1;
+    const opacityKeyword = keywords.find(function(item) {
+      return item.indexOf("OPACITY") !== -1;
+    });
+    if (opacityKeyword !== undefined) {
+      const val = opacityKeyword.split("=")[1];
+      return parseFloat(val);
+    } else return 1;
   }
 
   // HANDLE URL PARAMETERS
@@ -365,8 +384,9 @@ class BasemapSwitcher extends Component {
       }
     }
   }
-
+    
   render() {
+    
     // STYLE USED BY SLIDER
     const sliderWrapperStyle = {
       width: 60,

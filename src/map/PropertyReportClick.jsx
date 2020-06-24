@@ -10,6 +10,7 @@ import { Vector as VectorSource } from "ol/source.js";
 import { Stroke, Style } from "ol/style.js";
 import PropertyReport from "./PropertyReport";
 import copy from "copy-to-clipboard";
+import { Image as ImageLayer } from "ol/layer.js";
 
 // https://opengis.simcoe.ca/geoserver/wfs?service=wfs&version=2.0.0&request=GetFeature&typeNames=simcoe:Assessment%20Parcel&outputFormat=application/json&cql_filter=INTERSECTS(geom,%20POINT%20(-8874151.72%205583068.78))
 const parcelURLTemplate = (mainURL, x, y) => `${mainURL}&cql_filter=INTERSECTS(geom,%20POINT%20(${x}%20${y}))`;
@@ -29,7 +30,7 @@ class PropertyReportClick extends Component {
   constructor(props) {
     super(props);
     // LISTEN FOR MAP TO MOUNT
-    window.emitter.addListener("mapLoaded", () => this.onMapLoad());
+    window.emitter.addListener("mapParametersComplete", () => this.onMapLoad());
 
     this.onMapLoad = this.onMapLoad.bind(this);
 
@@ -80,7 +81,7 @@ class PropertyReportClick extends Component {
       for (let index = 0; index < layers.length; index++) {
         if (disable) break;
         const layer = layers[index];
-        if (layer.get("disableParcelClick") && layer.getVisible() && layer.type === "IMAGE") {
+        if (layer.get("disableParcelClick") && layer.getVisible() && layer instanceof ImageLayer) {
           var url = layer.getSource().getFeatureInfoUrl(evt.coordinate, viewResolution, "EPSG:3857", { INFO_FORMAT: "application/json" });
           if (url) {
             // eslint-disable-next-line
@@ -121,8 +122,16 @@ class PropertyReportClick extends Component {
     var url = window.location.href;
 
     //ADD LOCATIONID
-    if (url.indexOf("?") > 0) url = url + "&ARN=" + arn;
-    else url = url + "?ARN=" + arn;
+    if (url.indexOf("?") > 0) {
+      let newUrl = helpers.removeURLParameter(url, "ARN");
+      if (newUrl.indexOf("?") > 0) {
+        url = newUrl + "&ARN=" + arn;
+      } else {
+        url = newUrl + "?ARN=" + arn;
+      }
+    } else {
+      url = url + "?ARN=" + arn;
+    }
 
     return url;
   };
@@ -190,7 +199,7 @@ class PropertyReportClick extends Component {
           </span>
         </CopyToClipboard>
         &nbsp;
-        <span className="sc-fakeLink" onClick={() => helpers.showURLWindow(mainConfig.termsUrl, false, "full")}>
+        <span className="sc-fakeLink" onClick={() => helpers.showURLWindow(mainConfig.termsUrl, false, "full", true, true)}>
           [Terms]
         </span>
       </InfoRow>

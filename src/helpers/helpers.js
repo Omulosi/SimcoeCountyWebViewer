@@ -26,6 +26,7 @@ import proj4 from "proj4";
 import { register } from "ol/proj/proj4";
 import { fromLonLat } from "ol/proj";
 import { getVectorContext } from "ol/render";
+import { KeyboardPan, KeyboardZoom } from "ol/interaction.js";
 
 //OTHER
 import { parseString } from "xml2js";
@@ -34,6 +35,7 @@ import ShowMessage from "./ShowMessage.jsx";
 import URLWindow from "./URLWindow.jsx";
 import mainConfig from "../config.json";
 import { InfoRow } from "./InfoRow.jsx";
+import blankImage from "./images/blank.png";
 
 // REGISTER CUSTOM PROJECTIONS
 proj4.defs([["EPSG:26917", "+proj=utm +zone=17 +ellps=GRS80 +datum=NAD83 +units=m +no_defs "]]);
@@ -76,8 +78,14 @@ export function isMobile() {
 }
 
 // SHOW URL WINDOW
-export function showURLWindow(url, showFooter = false, mode = "normal") {
-  ReactDOM.render(<URLWindow key={shortid.generate()} mode={mode} showFooter={showFooter} url={url} />, document.getElementById("map-modal-window"));
+export function showURLWindow(url, showFooter = false, mode = "normal", honorDontShow = false) {
+  let isSameOrigin = true;
+  if (url !== undefined) isSameOrigin = url.toLowerCase().indexOf(window.location.origin.toLowerCase()) !== -1;
+  if (isSameOrigin) {
+    ReactDOM.render(<URLWindow key={shortid.generate()} mode={mode} showFooter={showFooter} url={url} honorDontShow={honorDontShow} />, document.getElementById("map-modal-window"));
+  }else{
+    window.open(url, "_blank");
+  }
 }
 
 // GET ARCGIS TILED LAYER
@@ -151,7 +159,18 @@ export function getSimcoeTileXYZLayer(url) {
     tileGrid: tileGrid,
     crossOrigin: "anonymous"
   });
-  source.on("tileloaderror", function() {});
+  source.on("tileloaderror", function(event) {
+    // BROWSER STILL KICKS OUT 404 ERRORS.  ANYBODY KNOW A WAY TO PREVENT THE ERRORS IN THE BROWSER?
+    //console.log("erro");
+    event.tile.getImage().src = blankImage;
+    // var tileLoadFunction = function(imageTile, src) {
+    //   imageTile.getImage().src = blankImage;
+    // };
+    // if (event.tile.tileLoadFunction_ !== tileLoadFunction) {
+    //   event.tile.tileLoadFunction_ = tileLoadFunction;
+    //   event.tile.load();
+    // }
+  });
 
   return new TileLayer({
     projection: "EPSG:4326",
@@ -259,21 +278,20 @@ export function httpGetText(url, callback) {
 // HTTP GET WAIT
 export async function httpGetTextWait(url, callback) {
   let data = await fetch(url)
-  .then(response => {
-    const resp = response.text();
-    //console.log(resp);
-    return resp;
-  })
-  .catch(err => {
-    console.log("Error: ", err);
-  });
+    .then(response => {
+      const resp = response.text();
+      //console.log(resp);
+      return resp;
+    })
+    .catch(err => {
+      console.log("Error: ", err);
+    });
   if (callback !== undefined) {
     //console.log(data);
     callback(data);
   }
   return data;
 }
-
 
 // GET JSON (NO WAITING)
 export function getJSON(url, callback) {
@@ -377,8 +395,16 @@ export function getWFSLayerRecordCount(serverUrl, layerName, callback) {
   });
 }
 
-export function zoomToFeature(feature) {
-  window.map.getView().fit(feature.getGeometry().getExtent(), window.map.getSize(), { duration: 1000 });
+export function zoomToFeature(feature, animate = true) {
+  if (animate) {
+    if (feature.getGeometry().getType() === "Point") {
+      window.map.getView().fit(feature.getGeometry().getExtent(), { duration: 1000, minResolution: 1 });
+    } else {
+      window.map.getView().fit(feature.getGeometry().getExtent(), { duration: 1000 });
+    }
+  } else {
+    window.map.getView().fit(feature.getGeometry().getExtent(), window.map.getSize(), { duration: 1000 });
+  }
 }
 
 // THIS RETURNS THE ACTUAL REACT ELEMENT USING DOM ID
@@ -695,6 +721,23 @@ export function getWKTFeature(wktString) {
   return feature;
 }
 
+export function getWKTStringFromFeature(feature) {
+  var wkt = new WKT();
+  const wktString = wkt.writeFeature(feature);
+  console.log(wktString);
+  return wktString;
+
+  // if (wktString === undefined) return;
+
+  // // READ WKT
+  // var wkt = new WKT();
+  // var feature = wkt.readFeature(wktString, {
+  //   dataProjection: "EPSG:3857",
+  //   featureProjection: "EPSG:3857"
+  // });
+  // return feature;
+}
+
 export function formatReplace(fmt, ...args) {
   if (!fmt.match(/^(?:(?:(?:[^{}]|(?:\{\{)|(?:\}\}))+)|(?:\{[0-9]+\}))+$/)) {
     throw new Error("invalid format string.");
@@ -747,6 +790,16 @@ export function bufferGeometry(geometry, distanceMeters, callback) {
   });
 }
 
+export function disableKeyboardEvents(disable) {
+  if (window.map !== undefined && window.map !== null){
+    window.map.getInteractions().forEach(function(interaction) {
+      if (interaction instanceof KeyboardPan || interaction instanceof KeyboardZoom) {
+        interaction.setActive(!disable);
+      }
+    });
+  }
+}
+
 export function getGeometryCenter(geometry, callback) {
   const url = mainConfig.apiUrl + "postGetGeometryCenter/";
   const geoJSON = getGeoJSONFromGeometry(geometry);
@@ -767,6 +820,7 @@ export function replaceAllInString(str, find, replace) {
   return str.replace(new RegExp(_escapeRegExp(find), "g"), replace);
 }
 function _escapeRegExp(str) {
+  // eslint-disable-next-line
   return str.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
 }
 
@@ -774,9 +828,28 @@ export function showFeaturePopup(coord, feature) {
   window.popup.show(coord, <FeaturePopupContent feature={feature}></FeaturePopupContent>);
 }
 
+export function removeURLParameter(url, parameter) {
+  //prefer to use l.search if you have a location/link object
+  var urlparts = url.split("?");
+  if (urlparts.length >= 2) {
+    var prefix = encodeURIComponent(parameter) + "=";
+    var pars = urlparts[1].split(/[&;]/g);
+
+    //reverse iteration as may be destructive
+    for (var i = pars.length; i-- > 0; ) {
+      //idiom for string.startsWith
+      if (pars[i].lastIndexOf(prefix, 0) !== -1) {
+        pars.splice(i, 1);
+      }
+    }
+
+    return urlparts[0] + (pars.length > 0 ? "?" + pars.join("&") : "");
+  }
+  return url;
+}
 function FeaturePopupContent(props) {
   return (
-    <div>
+    <div className="sc-live-layer-popup-content">
       {Object.entries(props.feature.getProperties()).map(row => {
         if (row[0] !== "geometry" && row[0].substring(0, 1) !== "_") {
           return <InfoRow key={getUID()} value={row[1]} label={row[0]} />;

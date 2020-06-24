@@ -27,6 +27,7 @@ import Portal from "../helpers/Portal.jsx";
 import * as helpers from "../helpers/helpers";
 import mainConfig from "../config.json";
 import Identify from "./Identify";
+import AttributeTable from "../helpers/AttributeTable.jsx";
 
 const scaleLineControl = new ScaleLine();
 const feedbackTemplate = (xmin, xmax, ymin, ymax, centerx, centery, scale) =>
@@ -42,34 +43,46 @@ class SCMap extends Component {
       mapClassName: "sc-map",
       shareURL: null,
       parcelClickText: "Disable Property Click",
-      isIE: false
+      isIE: false,
+      mapBottom: 0,
     };
+    // LISTEN FOR MAP CURSOR TO CHANGE
+    window.emitter.addListener("changeCursor", cursorStyle => this.changeCursor(cursorStyle));
+
+    // LISTEN FOR TOC TO LOAD
+    window.emitter.addListener("tocLoaded", () => this.handleUrlParameters());
+
+    // LISTEN FOR ATTRIBUTE TABLE SIZE
+    window.emitter.addListener("attributeTableResize", (height) => this.onAttributeTableResize(height));
   }
 
   componentDidMount() {
+    if (mainConfig.leftClickIdentify) {
+      this.setState({mapClassName:"sc-map identify"});
+    }
     let centerCoords = mainConfig.centerCoords;
     let defaultZoom = mainConfig.defaultZoom;
-    const defaultsStorage = sessionStorage.getItem(this.storageMapDefaultsKey); 
+    const defaultsStorage = sessionStorage.getItem(this.storageMapDefaultsKey);
     const storage = localStorage.getItem(this.storageExtentKey);
     if (defaultsStorage !== null && storage === null) {
       const detaults = JSON.parse(defaultsStorage);
       if (detaults.zoom !== undefined) defaultZoom = detaults.zoom;
       if (detaults.center !== undefined) centerCoords = detaults.center;
     }
-    const resolutions = [
-      305.74811314055756,
-      152.87405657041106,
-      76.43702828507324,
-      38.21851414253662,
-      19.10925707126831,
-      9.554628535634155,
-      4.77731426794937,
-      2.388657133974685,
-      1.1943285668550503,
-      0.5971642835598172,
-      0.29858214164761665,
-      0.1492252984505969
-    ];
+    // const resolutions = [
+    //   305.74811314055756,
+    //   152.87405657041106,
+    //   76.43702828507324,
+    //   38.21851414253662,
+    //   19.10925707126831,
+    //   9.554628535634155,
+    //   4.77731426794937,
+    //   2.388657133974685,
+    //   1.1943285668550503,
+    //   0.5971642835598172,
+    //   0.29858214164761665,
+    //   0.1492252984505969
+    // ];
     var map = new Map({
       controls: defaultControls().extend([scaleLineControl, new FullScreen()]),
       layers: [],
@@ -77,16 +90,16 @@ class SCMap extends Component {
       view: new View({
         center: centerCoords,
         zoom: defaultZoom,
-        maxZoom: mainConfig.maxZoom
+        maxZoom: mainConfig.maxZoom,
         //resolutions: resolutions
       }),
       interactions: defaultInteractions({ keyboard: true, altShiftDragRotate: false, pinchRotate: false, mouseWheelZoom: false }).extend([
         new MouseWheelZoom({
           duration: 0,
-          constrainResolution: true
-        })
+          constrainResolution: true,
+        }),
       ]),
-      keyboardEventTarget: document
+      keyboardEventTarget: document,
     });
     if (storage !== null) {
       const extent = JSON.parse(storage);
@@ -99,15 +112,14 @@ class SCMap extends Component {
 
     // EMIT A CHANGE IN THE SIDEBAR (IN OR OUT)
     window.emitter.emit("mapLoaded");
-
     window.map.getViewport().addEventListener("contextmenu", evt => {
       evt.preventDefault();
       this.contextCoords = window.map.getEventCoordinate(evt);
 
       const menu = (
         <Portal>
-          <FloatingMenu key={helpers.getUID()} buttonEvent={evt} onMenuItemClick={this.onMenuItemClick} styleMode="left" autoY={true}>
-            <MenuItem className="sc-floating-menu-toolbox-menu-item" key="sc-floating-menu-basic-mode">
+          <FloatingMenu key={helpers.getUID()} buttonEvent={evt} onMenuItemClick={this.onMenuItemClick} autoY={true} autoX={true}>
+            <MenuItem className={helpers.isMobile() ? "sc-hidden" : "sc-floating-menu-toolbox-menu-item"} key="sc-floating-menu-basic-mode">
               <FloatingMenuItem imageName={"collased.png"} label="Switch To Basic" />
             </MenuItem>
             <MenuItem className="sc-floating-menu-toolbox-menu-item" key="sc-floating-menu-property-click">
@@ -140,27 +152,6 @@ class SCMap extends Component {
       ReactDOM.render(menu, document.getElementById("portal-root"));
     });
 
-    // HANDLE URL PARAMETERS (ZOOM TO XY)
-    const x = helpers.getURLParameter("X");
-    const y = helpers.getURLParameter("Y");
-    const sr = helpers.getURLParameter("SR") === null ? "WEB" : helpers.getURLParameter("SR");
-    if (x !== null && y !== null) {
-      let coords = [x, y];
-      if (sr === "WGS84") coords = fromLonLat([Math.round(x * 100000) / 100000, Math.round(y * 100000) / 100000]);
-
-      helpers.flashPoint(coords);
-    }
-
-    // HANDLE URL PARAMETERS (ZOOM TO EXTENT)
-    const xmin = helpers.getURLParameter("XMIN");
-    const ymin = helpers.getURLParameter("YMIN");
-    const xmax = helpers.getURLParameter("XMAX");
-    const ymax = helpers.getURLParameter("YMAX");
-    if (xmin !== null && ymin !== null && xmax !== null && ymax !== null) {
-      const extent = [xmin, xmax, ymin, ymax];
-      window.map.getView().fit(extent, window.map.getSize(), { duration: 1000 });
-    }
-
     // APP STAT
     helpers.addAppStat("STARTUP", "MAP_LOAD");
 
@@ -173,10 +164,103 @@ class SCMap extends Component {
       // If Internet Explorer, return version number
       this.setState({ isIE: true });
       helpers.showURLWindow(mainConfig.ieWarningUrl);
+    } else {
+      // SHOW TERMS
+      if (helpers.isMobile()) {
+        window.emitter.emit("setSidebarVisiblity", "CLOSE");
+        helpers.showURLWindow(mainConfig.termsUrl, false, "full");
+      } else helpers.showURLWindow(mainConfig.termsUrl);
+    }
+
+    // MAP LOADED
+    this.initialLoad = false;
+    window.map.once("rendercomplete", (event) => {
+      if (!this.initialLoad) {
+        window.emitter.emit("mapLoaded");
+        this.initialLoad = true;
+      }
+    });
+
+    window.map.on("change:size", () => {
+      if (!window.isAttributeTableResizing) {
+        window.emitter.emit("mapResize");
+      }
+    });
+
+    // ATTRIBUTE TABLE TESTING
+    // helpers.getWFSGeoJSON(
+    //   "https://opengis.simcoe.ca/geoserver/",
+    //   "simcoe:Airport",
+    //   (result) => {
+    //     if (result.length === 0) return;
+
+    //     window.emitter.emit("openAttributeTable", { name: "Airport", geoJson: result });
+    //   },
+    //   null,
+    //   null,
+    //   null
+    // );
+  }
+  changeCursor = (cursorStyle) =>
+  {
+    let cursorStyles = ["standard", "identify"];
+    cursorStyles.splice( cursorStyles.indexOf(cursorStyle), 1 );
+    let classes = this.state.mapClassName.split(" ");
+    if (classes.indexOf(cursorStyle) === -1){
+      cursorStyles.forEach(styleName => {
+        if (classes.indexOf(styleName) !== -1) classes.splice(classes.indexOf(styleName), 1 );
+      });
+      classes.push(cursorStyle);
+      this.setState({mapClassName:classes.join(" ")});
     }
   }
 
-  onMenuItemClick = key => {
+  onAttributeTableResize = (height) => {
+    console.log(height);
+    console.log("att resize event in map");
+    this.setState({ mapBottom: Math.abs(height) }, () => {
+      //this.forceUpdate();
+      window.map.updateSize();
+      // setTimeout(function() {
+      //   window.map.updateSize();
+      // }, 300);
+    });
+  };
+
+  handleUrlParameters = () => {
+    const storage = localStorage.getItem(this.storageExtentKey);
+
+    // GET URL PARAMETERS (ZOOM TO XY)
+    const x = helpers.getURLParameter("X");
+    const y = helpers.getURLParameter("Y");
+    const sr = helpers.getURLParameter("SR") === null ? "WEB" : helpers.getURLParameter("SR");
+
+    // GET URL PARAMETERS (ZOOM TO EXTENT)
+    const xmin = helpers.getURLParameter("XMIN");
+    const ymin = helpers.getURLParameter("YMIN");
+    const xmax = helpers.getURLParameter("XMAX");
+    const ymax = helpers.getURLParameter("YMAX");
+
+    if (x !== null && y !== null) {
+      // URL PARAMETERS (ZOOM TO XY)
+      let coords = [x, y];
+      if (sr === "WGS84") coords = fromLonLat([Math.round(x * 100000) / 100000, Math.round(y * 100000) / 100000]);
+
+      helpers.flashPoint(coords);
+    } else if (xmin !== null && ymin !== null && xmax !== null && ymax !== null) {
+      //URL PARAMETERS (ZOOM TO EXTENT)
+      const extent = [parseFloat(xmin), parseFloat(ymin), parseFloat(xmax), parseFloat(ymax)];
+      window.map.getView().fit(extent, window.map.getSize(), { duration: 1000 });
+    } else if (storage !== null) {
+      // ZOOM TO SAVED EXTENT
+      const extent = JSON.parse(storage);
+      window.map.getView().fit(extent, window.map.getSize(), { duration: 1000 });
+    }
+
+    window.emitter.emit("mapParametersComplete");
+  };
+
+  onMenuItemClick = (key) => {
     if (key === "sc-floating-menu-zoomin") window.map.getView().setZoom(window.map.getView().getZoom() + 1);
     else if (key === "sc-floating-menu-zoomout") window.map.getView().setZoom(window.map.getView().getZoom() - 1);
     else if (key === "sc-floating-menu-property-click") window.emitter.emit("showPropertyReport", this.contextCoords);
@@ -203,7 +287,7 @@ class SCMap extends Component {
 
   identify = () => {
     const point = new Point(this.contextCoords);
-    window.emitter.emit("loadReport", <Identify geometry={point}></Identify>);
+    window.emitter.emit("loadReport", <Identify geometry={point} />);
   };
 
   reportProblem = () => {
@@ -267,12 +351,12 @@ class SCMap extends Component {
   }
 
   render() {
-    window.emitter.addListener("sidebarChanged", isSidebarOpen => this.sidebarChanged(isSidebarOpen));
+    window.emitter.addListener("sidebarChanged", (isSidebarOpen) => this.sidebarChanged(isSidebarOpen));
 
     return (
       <div>
         <div id="map-modal-window" />
-        <div id="map" className={this.state.mapClassName} tabIndex="0" />
+        <div id="map" className={this.state.mapClassName} tabIndex="0" style={{ bottom: this.state.mapBottom }} />
         <Navigation />
         <FooterTools />
         <BasemapSwitcher />
@@ -289,6 +373,7 @@ class SCMap extends Component {
             Follow @simcoecountygis
           </GitHubButton>
         </div>
+        <AttributeTable />
       </div>
     );
   }

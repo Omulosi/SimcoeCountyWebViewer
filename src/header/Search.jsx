@@ -13,14 +13,14 @@ import { CopyToClipboard } from "react-copy-to-clipboard";
 import Feature from "ol/Feature";
 import Point from "ol/geom/Point";
 import Select from "react-select";
-import { KeyboardPan, KeyboardZoom } from "ol/interaction.js";
+
 
 // URLS
 const apiUrl = mainConfig.apiUrl;
-const googleDirectionsURL = (lat, long) => `https://www.google.com/maps?saddr=My+Location&daddr=${lat},${long}`;
+const googleDirectionsURL = (lat, long) => `https://www.google.com/maps?saddr=Current+Location&daddr=${lat},${long}`;
 const searchURL = (apiUrl, searchText, type, muni, limit) => `${apiUrl}async/search/?q=${searchText}&type=${type}&muni=${muni}&limit=${limit}`;
 const searchInfoURL = (apiUrl, locationID) => `${apiUrl}searchById/${locationID}`;
-const searchTypesURL = apiUrl => `${apiUrl}/getSearchTypes`;
+const searchTypesURL = apiUrl => `${apiUrl}getSearchTypes`;
 
 // DEFAULT SEARCH LIMIT
 const defaultSearchLimit = 10;
@@ -86,27 +86,33 @@ class Search extends Component {
     this.removeMarkersClick = this.removeMarkersClick.bind(this);
     this.cleanup = this.cleanup.bind(this);
     this.storageKey = "searchHistory";
+
+    // LISTEN FOR MAP TO MOUNT
+    window.emitter.addListener("mapParametersComplete", () => this.onMapLoad());
+
+    this.state = {
+      value: "",
+      searchResults: [],
+      hover: false,
+      iconInitialClass: "sc-search-icon-initial",
+      iconActiveClass: "sc-search-icon-active-hidden",
+      showMore: false,
+      searchTypes: [],
+      selectedType: ""
+    };
   }
-  state = {
-    value: "",
-    searchResults: [],
-    hover: false,
-    iconInitialClass: "sc-search-icon-initial",
-    iconActiveClass: "sc-search-icon-active-hidden",
-    showMore: false,
-    searchTypes: [],
-    selectedType: ""
-  };
 
   requestTimer = null;
 
-  componentDidMount() {
+  onMapLoad = () => {
     // HANDLE URL PARAMETER
     if (locationId !== null) {
       // CALL API TO GET LOCATION DETAILS
       helpers.getJSON(searchInfoURL(apiUrl, locationId), result => this.jsonCallback(result));
     }
+  };
 
+  componentDidMount() {
     helpers.getJSON(searchTypesURL(apiUrl), result => {
       let items = [];
       items.push({ label: "All", value: "All" });
@@ -191,7 +197,7 @@ class Search extends Component {
         source: new VectorSource({
           features: []
         }),
-        zIndex: 1000
+        zIndex: 100000
       });
       searchGeoLayer.set("name", "sc-search-geo");
       window.map.addLayer(searchGeoLayer);
@@ -201,7 +207,7 @@ class Search extends Component {
         source: new VectorSource({
           features: []
         }),
-        zIndex: 1000
+        zIndex: 100000
       });
       searchIconLayer.setStyle(styles["point"]);
       searchIconLayer.set("name", "sc-search-icon");
@@ -253,8 +259,8 @@ class Search extends Component {
     searchGeoLayer.getSource().addFeature(fullFeature);
     searchIconLayer.getSource().addFeature(pointFeature);
 
-    searchGeoLayer.setZIndex(100);
-    searchIconLayer.setZIndex(100);
+    //searchGeoLayer.setZIndex(100);
+    //searchIconLayer.setZIndex(100);
 
     // SET STYLE AND ZOOM
     if (result.geojson.indexOf("Point") !== -1) {
@@ -289,8 +295,8 @@ class Search extends Component {
 
       fullFeature.setStyle(pointStyle);
     } else {
-      let defaultStyle = myMapsHelpers.getDefaultDrawStyle([255, 0, 0, 0.8], false, 2, fullFeature.getGeometry().getType());
-      defaultStyle.setFill(new Fill({ color: [255, 0, 0, 0] }));
+      let defaultStyle = myMapsHelpers.getDefaultDrawStyle([102, 255, 102, 0.3], false, 6, fullFeature.getGeometry().getType());
+      defaultStyle.setFill(new Fill({ color: [102, 255, 102, 0.3] }));
       fullFeature.setStyle(defaultStyle);
     }
   }
@@ -359,8 +365,8 @@ class Search extends Component {
       // SET SOURCE
       searchIconLayer.getSource().addFeature(feature);
 
-      searchGeoLayer.setZIndex(100);
-      searchIconLayer.setZIndex(100);
+    // searchGeoLayer.setZIndex(100);
+    // searchIconLayer.setZIndex(100);
 
       // SET STYLE AND ZOOM
       searchGeoLayer.setStyle(styles["point"]);
@@ -419,12 +425,13 @@ class Search extends Component {
     // SEARCH LAYERS
     if (selectedType === "All" || selectedType === "Map Layer") {
       let layers = [];
+      // eslint-disable-next-line
       Object.entries(window.allLayers).map(row => {
         const layerItems = row[1];
         layerItems.forEach(layer => {
           if (layer.displayName.toUpperCase().indexOf(this.state.value.toUpperCase()) >= 0) {
             //console.log(layer);
-            layers.push({ fullName:layer.name, name:layer.displayName, type: "Map Layer", layerGroupName:layer.groupName , layerGroup: layer.group, imageName: "layers.png", index: layer.index });
+            layers.push({ fullName:layer.name, name:layer.displayName,isVisible: layer.layer.getVisible(), type: "Map Layer", layerGroupName:layer.groupName , layerGroup: layer.group, imageName: "layers.png", index: layer.index });
           }
         });
       });
@@ -434,6 +441,7 @@ class Search extends Component {
     // TOOLS
     if (selectedType === "All" || selectedType === "Tool") {
       let tools = [];
+      // eslint-disable-next-line
       mainConfig.sidebarToolComponents.forEach(tool => {
         if (tool.name.toUpperCase().indexOf(this.state.value.toUpperCase()) >= 0) {
           tools.push({ name: helpers.replaceAllInString(tool.name, "_", " "), type: "Tool", imageName: "tools.png" });
@@ -456,13 +464,7 @@ class Search extends Component {
     this.setState({ searchResults: newResults });
   };
 
-  disableKeyboardEvents = disable => {
-    window.map.getInteractions().forEach(function(interaction) {
-      if (interaction instanceof KeyboardPan || interaction instanceof KeyboardZoom) {
-        interaction.setActive(!disable);
-      }
-    });
-  };
+  
 
   render() {
     // INIT LAYER
@@ -521,10 +523,10 @@ class Search extends Component {
             placeholder: "Search...",
             name: "sc-search-textbox",
             onFocus: result => {
-              this.disableKeyboardEvents(true);
+              helpers.disableKeyboardEvents(true);
             },
             onBlur: result => {
-              this.disableKeyboardEvents(false);
+              helpers.disableKeyboardEvents(false);
             }
           }}
           className="sc-search-textbox"
@@ -541,6 +543,11 @@ class Search extends Component {
             this.onItemSelect(value, item);
           }}
           onChange={async (event, value) => {
+            // CHECK FOR ILLEGAL CHARS
+            if (value.indexOf("\\") !== -1) {
+              return;
+            }
+
             this.setState({ value });
             if (value !== "") {
               this.setState({ iconInitialClass: "sc-search-icon-initial-hidden" });
@@ -548,7 +555,6 @@ class Search extends Component {
 
               let limit = defaultSearchLimit;
               if (this.state.showMore) limit = 50;
-              console.log(apiUrl);
               await helpers.getJSONWait(searchURL(apiUrl, value, this.state.selectedType.value, undefined, limit), responseJson => {
                 if (responseJson !== undefined) this.searchResultsHandler(responseJson, defaultSearchLimit);
               });
@@ -573,11 +579,11 @@ class Search extends Component {
             return (
               <div className={isHighlighted ? "sc-search-item-highlighted" : "sc-search-item"} key={helpers.getUID()}>
                 <div className="sc-search-item-left">
-                  <img src={images[item.imageName]} alt="blue pin" />
+                  <img src={item.imageName === undefined ? images["map-marker-light-blue.png"] : images[item.imageName]} alt="blue pin" />
                 </div>
                 <div className="sc-search-item-content">
                   <Highlighter highlightClassName="sc-search-highlight-words" searchWords={[this.state.value]} textToHighlight={item.name} />
-                  <div className="sc-search-item-sub-content">{type === "" ? item.type : " - " + type + " (" + item.type + ")"}</div>
+                  <div className="sc-search-item-sub-content">{type === "" ? item.type : " - " + type + " (" + item.type + (item.type === "Map Layer" && item.isVisible ? " - Currently Visible" : "") + ")"}</div>
                 </div>
               </div>
             );
@@ -608,8 +614,16 @@ class PopupContent extends Component {
     var url = window.location.href;
 
     //ADD LOCATIONID
-    if (url.indexOf("?") > 0) url = url + "&LOCATIONID=" + this.props.shareLocationId;
-    else url = url + "?LOCATIONID=" + this.props.shareLocationId;
+    if (url.indexOf("?") > 0) {
+      let newUrl = helpers.removeURLParameter(url, "LOCATIONID");
+      if (newUrl.indexOf("?") > 0) {
+        url = newUrl + "&LOCATIONID=" + this.props.shareLocationId;
+      } else {
+        url = newUrl + "?LOCATIONID=" + this.props.shareLocationId;
+      }
+    } else {
+      url = url + "?LOCATIONID=" + this.props.shareLocationId;
+    }
 
     return url;
   };

@@ -2,8 +2,8 @@
 import React, { Component } from "react";
 import ReactDOM from "react-dom";
 import Slider, { createSliderWithTooltip } from "rc-slider";
-import { sortableContainer, sortableElement } from "react-sortable-hoc";
-import { List, AutoSizer } from "react-virtualized";
+import { sortableContainer } from "react-sortable-hoc";
+import { AutoSizer } from "react-virtualized";
 import VirtualLayers from "./VirtualLayers.jsx";
 import arrayMove from "array-move";
 import GeoJSON from "ol/format/GeoJSON.js";
@@ -11,11 +11,11 @@ import GeoJSON from "ol/format/GeoJSON.js";
 // CUSTOM
 import "./Layers.css";
 import * as helpers from "../../../helpers/helpers";
-import * as TOCHelpers from "./TOCHelpers.jsx";
+import * as TOCHelpers from "../common/TOCHelpers.jsx";
 import FloatingMenu, { FloatingMenuItem } from "../../../helpers/FloatingMenu.jsx";
 import { Item as MenuItem } from "rc-menu";
 import Portal from "../../../helpers/Portal.jsx";
-import TOCConfig from "./TOCConfig.json";
+import TOCConfig from "../common/TOCConfig.json";
 
 const SortableVirtualList = sortableContainer(VirtualLayers, { withRef: true });
 
@@ -28,34 +28,36 @@ class Layers extends Component {
     this.virtualId = "sc-toc-virtual-layers";
     this.state = {
       allLayers: {},
-      layers: []
+      layers: [],
     };
 
     // LISTEN FOR MAP TO MOUNT
     window.emitter.addListener("mapLoaded", () => this.onMapLoad());
 
     // LISTEN FOR SEARCH RESULT
-    window.emitter.addListener("activeTocLayer", layerItem => this.onActivateLayer(layerItem));
+    window.emitter.addListener("activeTocLayer", (layerItem) => this.onActivateLayer(layerItem));
   }
 
-  onActivateLayer = layerItem => {
-    const groupName = layer => {return helpers.replaceAllInString(layer.layerGroup, " ", "_");}
+  onActivateLayer = (layerItem) => {
+    const groupName = (layer) => {
+      return helpers.replaceAllInString(layer.layerGroup, " ", "_");
+    };
 
     let layersCopy = Object.assign([], this.state.allLayers[groupName(layerItem)]);
 
-    layersCopy.forEach(layer => {
+    layersCopy.forEach((layer) => {
       if (layer.name === layerItem.fullName) {
         layer.visible = true;
         layer.layer.setVisible(true);
-        
+
         document.getElementById(this.virtualId).scrollTop = 0;
 
         var i = 0;
         var elemFound = false;
-        for (var i = 1; i <= 100; i++) {
+        for (i = 1; i <= 100; i++) {
           if (elemFound) return;
           // eslint-disable-next-line
-          (index => {
+          ((index) => {
             setTimeout(() => {
               if (elemFound) return;
 
@@ -82,13 +84,13 @@ class Layers extends Component {
   }
 
   onMapLoad = () => {
-    window.map.on("singleclick", evt => {
+    window.map.on("singleclick", (evt) => {
       const viewResolution = window.map.getView().getResolution();
-      this.state.layers.forEach(layer => {
+      this.state.layers.forEach((layer) => {
         if (layer.visible && layer.liveLayer) {
           var url = layer.layer.getSource().getFeatureInfoUrl(evt.coordinate, viewResolution, "EPSG:3857", { INFO_FORMAT: "application/json" });
           if (url) {
-            helpers.getJSON(url, result => {
+            helpers.getJSON(url, (result) => {
               const features = result.features;
               if (features.length > 0) {
                 const geoJSON = new GeoJSON().readFeatures(result);
@@ -108,13 +110,13 @@ class Layers extends Component {
       if (!this.state.allLayers.hasOwnProperty(key)) continue;
 
       var obj = this.state.allLayers[key];
-      obj.forEach(layer => {
+      obj.forEach((layer) => {
         layer.layer.setVisible(false);
       });
     }
 
     this.setState({ layers: undefined, allLayers: [] }, () => {
-      this.refreshLayers(this.props.group, this.props.sortAlpha,this.props.allGroups);
+      this.refreshLayers(this.props.group, this.props.sortAlpha, this.props.allGroups);
     });
   };
 
@@ -124,13 +126,13 @@ class Layers extends Component {
 
     if (layers === undefined) {
       layers = group.layers;
-    if (layers !== undefined) {
+      if (layers !== undefined) {
         let allLayers = this.state.allLayers;
         allLayers[group.value] = layers;
-        
+
         // FETCH THE REST OF THE GROUPS
         const fetchGroups = (allGroups) => {
-            allGroups.forEach(groupItem => {
+          allGroups.forEach((groupItem) => {
             if (group.value !== groupItem.value) {
               let layersItems = this.state.allLayers[groupItem.value];
               if (layersItems === undefined) {
@@ -142,52 +144,52 @@ class Layers extends Component {
               }
             }
           });
-        }
+        };
         fetchGroups(allGroups);
         this.setState({ layers: layers, allLayers: allLayers }, () => {
           this.sortLayers(this.state.layers, sortAlpha);
         });
         return;
       }
-    }else{
+    } else {
       this.setState({ layers: layers }, () => {
         this.sortLayers(this.state.layers, sortAlpha);
       });
       return;
     }
 
-    TOCHelpers.getBasicLayers(group, layers => {
+    TOCHelpers.getBasicLayers(group, (layers) => {
       let allLayers = this.state.allLayers;
       allLayers[group.value] = layers;
 
       this.setState({ layers: layers, allLayers: allLayers }, () => {
         this.sortLayers(this.state.layers, sortAlpha);
 
-        const fetchGroups = (allGroups) =>{ // FETCH THE REST OF THE GROUPS
-          allGroups.forEach(groupItem => {
-          const layersItem = this.state.allLayers[groupItem.value];
+        const fetchGroups = (allGroups) => {
+          // FETCH THE REST OF THE GROUPS
+          allGroups.forEach((groupItem) => {
+            const layersItem = this.state.allLayers[groupItem.value];
 
-          if (layersItem === undefined) {
-            TOCHelpers.getBasicLayers(groupItem, layers => {
-              let allLayers = this.state.allLayers;
-              allLayers[groupItem.value] = layers;
-              this.setState({ allLayers: allLayers });
-            });
-          }
-        });
+            if (layersItem === undefined) {
+              TOCHelpers.getBasicLayers(groupItem, (layers) => {
+                let allLayers = this.state.allLayers;
+                allLayers[groupItem.value] = layers;
+                this.setState({ allLayers: allLayers });
+              });
+            }
+          });
         };
         fetchGroups(allGroups);
       });
     });
-    
   };
 
   // isVisibleFromConfig()
   sortByAlphaCompare(a, b) {
-    if (a.displayName < b.displayName) {
+    if (a.tocDisplayName < b.tocDisplayName) {
       return -1;
     }
-    if (a.displayName > b.displayName) {
+    if (a.tocDisplayName > b.tocDisplayName) {
       return 1;
     }
     return 0;
@@ -220,7 +222,7 @@ class Layers extends Component {
     allLayers[this.props.group.value] = newLayers;
 
     this.setState({ layers: newLayers, allLayers: allLayers }, () => {
-      window.allLayers = this.state.allLayers;
+      window.allLayers = Object.values(this.state.allLayers);
       if (callback !== undefined) callback();
     });
   };
@@ -238,30 +240,29 @@ class Layers extends Component {
       const layers = this.state.allLayers[this.props.group.value];
       if (layers !== undefined) {
         // DISABLE LAYER VISIBILITY FROM PREVIOUS GROUP
-        TOCHelpers.disableLayersVisiblity(layers, newLayers => {
-          
+        TOCHelpers.disableLayersVisiblity(layers, (newLayers) => {
           allLayers[this.props.group.value] = newLayers;
           this.setState({ allLayers: allLayers }, () => {
             // ENABLE LAYER VISIBILITY FROM PREVIOUS GROUP
-           
+
             if (nextLayers !== undefined) {
-              TOCHelpers.enableLayersVisiblity(nextLayers, newLayers => {
+              TOCHelpers.enableLayersVisiblity(nextLayers, (newLayers) => {
                 let allLayers = this.state.allLayers;
                 allLayers[nextProps.group.value] = newLayers;
-                this.setState({ layers: newLayers, allLayers: allLayers, allGroups:allGroups }, () => {
-                  this.refreshLayers(nextProps.group, nextProps.sortAlpha,nextProps.allGroups);
+                this.setState({ layers: newLayers, allLayers: allLayers, allGroups: allGroups }, () => {
+                  this.refreshLayers(nextProps.group, nextProps.sortAlpha, nextProps.allGroups);
                 });
               });
             } else {
-              this.refreshLayers(nextProps.group, nextProps.sortAlpha,nextProps.allGroups);
+              this.refreshLayers(nextProps.group, nextProps.sortAlpha, nextProps.allGroups);
             }
           });
         });
-      } else this.refreshLayers(nextProps.group, nextProps.sortAlpha,nextProps.allGroups);
+      } else this.refreshLayers(nextProps.group, nextProps.sortAlpha, nextProps.allGroups);
     }
   }
 
-  registerListRef = listInstance => {
+  registerListRef = (listInstance) => {
     this.List = listInstance;
   };
 
@@ -274,10 +275,10 @@ class Layers extends Component {
     let { layers } = this.state;
     this.setState(
       {
-        layers: arrayMove(layers, oldIndex, newIndex)
+        layers: arrayMove(layers, oldIndex, newIndex),
       },
       () => {
-        TOCHelpers.updateLayerIndex(this.state.layers, newLayers => {
+        TOCHelpers.updateLayerIndex(this.state.layers, (newLayers) => {
           let allLayers = this.state.allLayers;
           allLayers[this.props.group.value] = newLayers;
           this.setState({ layers: newLayers, allLayers: allLayers });
@@ -289,12 +290,12 @@ class Layers extends Component {
   };
 
   // TRACK CURSOR SO I CAN RETURN IT TO SAME LOCATION AFTER ACTIONS
-  onSortMove = e => {
+  onSortMove = (e) => {
     this.lastPosition = document.getElementById(this.virtualId).scrollTop;
   };
 
   // LEGEND FOR EACH LAYER
-  onLegendToggle = layerInfo => {
+  onLegendToggle = (layerInfo) => {
     this.legendVisiblity(layerInfo);
   };
 
@@ -314,9 +315,9 @@ class Layers extends Component {
         this.setState(
           {
             // UPDATE LEGEND
-            layers: this.state.layers.map(layer =>
+            layers: this.state.layers.map((layer) =>
               layer.name === layerInfo.name ? Object.assign({}, layer, { showLegend: showLegend, height: rowHeight, legendHeight: height, legendImage: imgData }) : layer
-            )
+            ),
           },
           () => {
             document.getElementById(this.virtualId).scrollTop += this.lastPosition;
@@ -330,7 +331,7 @@ class Layers extends Component {
       this.setState(
         {
           // UPDATE LEGEND
-          layers: this.state.layers.map(layer => (layer.name === layerInfo.name ? Object.assign({}, layer, { showLegend: showLegend, height: rowHeight }) : layer))
+          layers: this.state.layers.map((layer) => (layer.name === layerInfo.name ? Object.assign({}, layer, { showLegend: showLegend, height: rowHeight }) : layer)),
         },
         () => {
           document.getElementById(this.virtualId).scrollTop += this.lastPosition;
@@ -342,7 +343,7 @@ class Layers extends Component {
   };
 
   // CHECKBOX FOR EACH LAYER
-  onCheckboxChange = layerInfo => {
+  onCheckboxChange = (layerInfo) => {
     this.lastPosition = document.getElementById(this.virtualId).scrollTop;
     const visible = !layerInfo.visible;
     layerInfo.layer.setVisible(visible);
@@ -350,7 +351,7 @@ class Layers extends Component {
     this.setState(
       {
         // UPDATE LEGEND
-        layers: this.state.layers.map(layer => (layer.name === layerInfo.name ? Object.assign({}, layer, { visible: visible }) : layer))
+        layers: this.state.layers.map((layer) => (layer.name === layerInfo.name ? Object.assign({}, layer, { visible: visible }) : layer)),
       },
       () => {
         document.getElementById(this.virtualId).scrollTop += this.lastPosition;
@@ -367,7 +368,7 @@ class Layers extends Component {
     this.setState(
       {
         // UPDATE LEGEND
-        layers: this.state.layers.map(layer => (layer.name === layerInfo.name ? Object.assign({}, layer, { opacity: opacity }) : layer))
+        layers: this.state.layers.map((layer) => (layer.name === layerInfo.name ? Object.assign({}, layer, { opacity: opacity }) : layer)),
       },
       () => {
         let allLayers = this.state.allLayers;
@@ -386,21 +387,27 @@ class Layers extends Component {
           buttonEvent={evtClone}
           autoY={true}
           item={this.props.info}
-          onMenuItemClick={action => this.onMenuItemClick(action, layerInfo)}
+          onMenuItemClick={(action) => this.onMenuItemClick(action, layerInfo)}
           styleMode={helpers.isMobile() ? "left" : "right"}
         >
           <MenuItem className="sc-floating-menu-toolbox-menu-item" key="sc-floating-menu-metadata">
             <FloatingMenuItem imageName={"metadata.png"} label="Metadata" />
           </MenuItem>
+          {/* <MenuItem className="sc-floating-menu-toolbox-menu-item" key="sc-floating-menu-attribute-table">
+            <FloatingMenuItem imageName={"metadata.png"} label="Open Attribute Table" />
+          </MenuItem> */}
           <MenuItem className="sc-floating-menu-toolbox-menu-item" key="sc-floating-menu-zoom-to-layer">
             <FloatingMenuItem imageName={"zoom-in.png"} label="Zoom to Layer" />
+          </MenuItem>
+          <MenuItem className="sc-floating-menu-toolbox-menu-item" key="sc-floating-menu-zoom-to-layer-visible">
+            <FloatingMenuItem imageName={"zoom-in.png"} label="Zoom to Visible Scale" />
           </MenuItem>
           <MenuItem className="sc-floating-menu-toolbox-menu-item" key="sc-floating-menu-download">
             <FloatingMenuItem imageName={"download.png"} label="Download" />
           </MenuItem>
           <MenuItem className="sc-layers-slider" key="sc-floating-menu-opacity">
             Adjust Transparency
-            <SliderWithTooltip tipFormatter={this.sliderTipFormatter} max={1} min={0} step={0.05} defaultValue={layerInfo.opacity} onChange={evt => this.onSliderChange(evt, layerInfo)} />
+            <SliderWithTooltip tipFormatter={this.sliderTipFormatter} max={1} min={0} step={0.05} defaultValue={layerInfo.opacity} onChange={(evt) => this.onSliderChange(evt, layerInfo)} />
           </MenuItem>
         </FloatingMenu>
       </Portal>
@@ -411,18 +418,33 @@ class Layers extends Component {
 
   onMenuItemClick = (action, layerInfo) => {
     if (action === "sc-floating-menu-metadata") {
-      TOCHelpers.getLayerInfo(layerInfo, result => {
+      TOCHelpers.getLayerInfo(layerInfo, (result) => {
         if (helpers.isMobile()) {
           window.emitter.emit("setSidebarVisiblity", "CLOSE");
           helpers.showURLWindow(TOCConfig.layerInfoURL + result.featureType.fullUrl, false, "full");
         } else helpers.showURLWindow(TOCConfig.layerInfoURL + result.featureType.fullUrl);
       });
     } else if (action === "sc-floating-menu-zoom-to-layer") {
-      TOCHelpers.getLayerInfo(layerInfo, result => {
+      TOCHelpers.getLayerInfo(layerInfo, (result) => {
         const boundingBox = result.featureType.nativeBoundingBox;
         const extent = [boundingBox.minx, boundingBox.miny, boundingBox.maxx, boundingBox.maxy];
         window.map.getView().fit(extent, window.map.getSize(), { duration: 1000 });
       });
+    } else if (action === "sc-floating-menu-attribute-table") {
+      helpers.getWFSGeoJSON(
+        "https://opengis.simcoe.ca/geoserver/",
+        layerInfo.name,
+        (result) => {
+          if (result.length === 0) return;
+
+          window.emitter.emit("openAttributeTable", { name: layerInfo.tocDisplayName, geoJson: result });
+        },
+        null,
+        null,
+        null
+      );
+    } else if (action === "sc-floating-menu-zoom-to-layer-visible") {
+      this.zoomToVisibleScale(layerInfo);
     } else if (action === "sc-floating-menu-download") {
       helpers.showMessage("Download", "Coming Soon!");
       // TOCHelpers.getLayerInfo(layerInfo, result => {
@@ -439,7 +461,42 @@ class Layers extends Component {
     helpers.addAppStat("Layer Options", action);
   };
 
-  toggleAllLegends = type => {
+  zoomToVisibleScale = (layerInfo) => {
+    const scales = [1155581, 577791, 288895, 144448, 72224, 36112, 18056, 9028, 4514, 2257, 1128, 564];
+
+    const scale = helpers.getMapScale();
+    let minScale = 0;
+    let maxScale = 100000000000;
+    if (layerInfo.minScale !== undefined) minScale = layerInfo.minScale[0];
+    if (layerInfo.maxScale !== undefined) maxScale = layerInfo.maxScale[0];
+
+    if (scale >= minScale && scale <= maxScale) {
+      helpers.showMessage("Zoom to Visible Scale", "Layer is already visible at this scale.");
+      return;
+    }
+
+    if (scale < minScale) {
+      const flipped = scales.reverse();
+      let index = 20;
+      flipped.forEach((scaleItem) => {
+        if (scaleItem >= minScale) {
+          window.map.getView().setZoom(index);
+          return;
+        }
+        index--;
+      });
+    } else if (scale > maxScale) {
+      let index = 9;
+      scales.forEach((scaleItem) => {
+        if (scaleItem <= maxScale) {
+          window.map.getView().setZoom(index);
+          return;
+        }
+        index++;
+      });
+    }
+  };
+  toggleAllLegends = (type) => {
     let showLegend = true;
     if (type === "CLOSE") showLegend = false;
 
@@ -461,10 +518,10 @@ class Layers extends Component {
 
       var obj = this.state.allLayers[key];
       let savedLayers = {};
-      obj.forEach(layer => {
+      obj.forEach((layer) => {
         const saveLayer = {
           name: layer.name,
-          visible: layer.visible
+          visible: layer.visible,
         };
         savedLayers[layer.name] = saveLayer;
       });
@@ -478,7 +535,7 @@ class Layers extends Component {
   };
 
   turnOffLayers = () => {
-    TOCHelpers.turnOffLayers(this.state.layers, newLayers => {
+    TOCHelpers.turnOffLayers(this.state.layers, (newLayers) => {
       let allLayers = this.state.allLayers;
       allLayers[this.props.group.value] = newLayers;
       this.setState({ layers: newLayers, allLayers: allLayers }, () => {});
@@ -489,10 +546,11 @@ class Layers extends Component {
     if (this.state.layers === undefined) return <div />;
 
     // FILTER LAYERS FROM SEARCH INPUT
-    const layers = this.state.layers.filter(layer => {
+    // eslint-disable-next-line
+    const layers = this.state.layers.filter((layer) => {
       if (this.props.searchText === "") return layer;
 
-      if (layer.displayName.toUpperCase().indexOf(this.props.searchText.toUpperCase()) !== -1) return layer;
+      if (layer.tocDisplayName.toUpperCase().indexOf(this.props.searchText.toUpperCase()) !== -1) return layer;
     });
 
     return (
@@ -503,7 +561,7 @@ class Layers extends Component {
               <SortableVirtualList
                 key={helpers.getUID()}
                 getRef={this.registerListRef}
-                ref={instance => {
+                ref={(instance) => {
                   this.SortableVirtualList = instance;
                 }}
                 items={layers}
